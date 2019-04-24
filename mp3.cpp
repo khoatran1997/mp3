@@ -26,3 +26,8 @@ private:
 	LabGPIO mp3cs(2,5);
 	LabGPIO sdcs(2,7);
 };
+
+int main(){
+	printf("Hello World");
+	return 0;
+}
