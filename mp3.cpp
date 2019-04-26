@@ -7,8 +7,8 @@ public:
 
 	void init(){
 		spi.Initialize();
-		dreg.SetAsInput();
 		xdcs.SetAsOutput();
+		dreq.SetAsInput();
 		sdcs.SetAsOutput();
 		mp3cs.SetAsOutput();
 	}
@@ -21,10 +21,10 @@ public:
 
 private:
 	LabSpi spi;
-	LabGPIO dreg(2,0);
-	LabGPIO xdcs(2,2);
-	LabGPIO mp3cs(2,5);
-	LabGPIO sdcs(2,7);
+	LabGPIO xdcs(2,0);  // VS1053 Data Select
+	LabGPIO dreq(2,2);  // VS1053 Data Request Interrupt Pin
+	LabGPIO mp3cs(2,5); // VS1053 Chip Select
+	LabGPIO sdcs(2,7);  // SD Card Chip Select
 };
 
 int main(){
