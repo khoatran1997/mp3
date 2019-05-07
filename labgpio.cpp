@@ -1,83 +1,90 @@
-#pragma once
 #include "labgpio.hpp"
 
+#include "L0_LowLevel/LPC40xx.h"
 
-void LabGPIO::SetAsInput(){
-	portPtr[portNum]->DIR &= ~(1<<pinNum);
-}
+LPC_GPIO_TypeDef * GPIO_ports[6] = {LPC_GPIO0, LPC_GPIO1, LPC_GPIO2, LPC_GPIO3, LPC_GPIO4, LPC_GPIO5}; 
+  /* You should not modify any hardware registers at this point
+   * You should store the port and pin using the constructor.
+   */
+      /// @param port - port number between 0 and 5
+      /// @param pin - pin number between 0 and 32
 
-void LabGPIO::SetAsOutput(){
-	portPtr[portNum]->DIR |= (1<<pinNum);
-}
+  void LabGPIO::SetAsInput()              /// Sets this GPIO as an input
+  {
+      GPIO_ports[thePort]->DIR |= ~(1 << thePin);
+  }
+  
+  void LabGPIO::SetAsOutput()           /// Sets this GPIO as an output
+  {
+      GPIO_ports[thePort]->DIR |= (1 << thePin);
+  }
+  
+  void LabGPIO::SetDirection(Direction direction) /// Sets this GPIO as an input
+      /// @param output - true => output, false => set pin to input
+  {
+      if(direction == Direction::kOutput) SetAsOutput();
+      else                                SetAsInput(); 
+  }
+  
+  void LabGPIO::SetHigh()             /// Set voltage of pin to HIGH
+  {
+      GPIO_ports[thePort]->SET |= (1 << thePin);
+  }
+  
+  void LabGPIO::SetLow()                /// Set voltage of pin to LOW 
+  {
+      GPIO_ports[thePort]->CLR |= (1 << thePin);
+  }
+  
+  void LabGPIO::set(State state)            /// Set pin state to high or low 
+                        /// depending on the input state parameter.
+                        /// Has no effect if the pin is set as "input".
+      /// @param state - State::kHigh => set pin high, State::kLow => set pin low
+  {
+      if(state == State::kHigh) //if expression is 0, PIN is currently input
+           SetHigh();
+      else SetLow();
+  }
+  
+  LabGPIO::State LabGPIO::Read()                /// Should return the state of the pin 
+                        /// (input or output, doesn't matter)
+      /// @return level of pin high => true, low => false
+  {
+      if(GPIO_ports[thePort]->PIN & (1 << thePin))
+           return State::kHigh;
+      else return State::kLow;
+  }
+ 
+  bool LabGPIO::ReadBool()              /// Should return the state of the pin 
+                        /// (input or output, doesn't matter)
+     /// @return level of pin high => true, low => false
+  {
+      return (bool) Read();
+  }
 
-void LabGPIO::SetDirection(Direction direction){
-	if(direction==LabGPIO::Direction::kOutput) SetAsOutput();
-	else SetAsInput();
-}
-
-void LabGPIO::SetHigh(){
-	portPtr[portNum]->SET |= (1<<pinNum);
-}
-
-void LabGPIO::SetLow(){
-	portPtr[portNum]->CLR |= (1<<pinNum);
-}
-
-void LabGPIO::set(State state){
-	if(state==LabGPIO::State::kHigh) SetHigh();
-	else SetLow();
-}
-
-LabGPIO::State LabGPIO::Read(){
-	if(portPtr[portNum]->PIN & (1<<pinNum)) return LabGPIO::State::kHigh;
-	else return LabGPIO::State::kLow;
-}
-
-bool LabGPIO::ReadBool(){
-	return portPtr[portNum]->PIN & (1<<pinNum);
-}
-
-void LabGPIO::EnableInterrupts(){
-	RegisterIsr(GPIO_IRQn, GpioInterruptHandler);
-}
-
-void LabGPIO::AttachInterruptHandler(IsrPointer isr, Edge edge){
-uint8_t tempport = portNum;
-if(tempport == 2) tempport--;
-pin_isr_map[tempport][pinNum] = isr;
-if(portNum == 2){
-if(edge == LabGPIO::Edge::kRising ||edge == LabGPIO::Edge::kBoth) LPC_GPIOINT->IO2IntEnR |= (1<<pinNum);
-else if(edge == LabGPIO::Edge::kFalling || edge == LabGPIO::Edge::kBoth) LPC_GPIOINT->IO2IntEnF |= (1<<pinNum);
-}
-else if(portNum == 0){
-if(edge == LabGPIO::Edge::kRising ||edge == LabGPIO::Edge::kBoth) LPC_GPIOINT->IO0IntEnR |= (1<<pinNum);
-else if(edge == LabGPIO::Edge::kFalling || edge == LabGPIO::Edge::kBoth) LPC_GPIOINT->IO0IntEnF |= (1<<pinNum);
-}
-}
-
-
-void LabGPIO::GpioInterruptHandler(){
-uint8_t port,pin;
-for(uint8_t i=0;i<32;i++){
-if((LPC_GPIOINT->IO0IntStatR & (1<<i)) || (LPC_GPIOINT->IO0IntStatF & (1<<i)) ){
-port = 0;
-pin = i;
-LPC_GPIOINT->IO0IntClr |= (1<<pin);
-pin_isr_map[port][pin]();
-}
-else if((LPC_GPIOINT->IO2IntStatR & (1<<i))  || (LPC_GPIOINT->IO2IntStatF & (1<<i))  ){
-port = 2;
-pin = i;
-LPC_GPIOINT->IO2IntClr |= (1<<pin);
-pin_isr_map[port][pin]();
-}
-}
-}
-
-
-
-
-
-
-
-
+  void LabGPIO::resetResistor()
+  {
+      switch(thePort)
+      {
+          case 0: if(thePin == 30)      LPC_IOCON -> P0_30 &= ~(0b11 << 3);
+                  else if(thePin == 29) LPC_IOCON -> P0_29 &= ~(0b11 << 3);
+                  break;
+          case 1: if(thePin == 19)      LPC_IOCON -> P1_19 &= ~(0b11 << 3);
+                  else if(thePin == 15) LPC_IOCON -> P1_15 &= ~(0b11 << 3);
+                  break;
+          default:printf("Cannot reset pull down resistor.\n");
+      }
+  }
+  void LabGPIO::enablePullDownResistor()
+  {
+      switch(thePort)
+      {
+          case 0: if(thePin == 30)     LPC_IOCON -> P0_30 |= (0b1 << 3);
+                  else if(thePin == 29)LPC_IOCON -> P0_29 |= (0b1 << 3);
+                  break;
+          case 1: if(thePin == 19)     LPC_IOCON -> P1_19 |= (0b1 << 3);
+                  else if(thePin == 15)LPC_IOCON -> P1_15 |= (0b1 << 3);
+                  break;
+          default:printf("Cannot set pull down resistor.\n");
+      }
+  }
