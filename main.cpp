@@ -15,6 +15,8 @@
 #include "utility/log.hpp"
 #include <cstring>
 #include "semphr.h"
+#include "L3_Application/commands/rtos_command.hpp"
+#include "L3_Application/commandline.hpp"
 #define SIZE 20//size of song name buffer
 
 //FATFS variables
@@ -22,16 +24,20 @@ FATFS fat_fs;
 FIL fil;
 DIR dir;
 FILINFO fno;
-//control state variables
-bool nextSong = false;
 
+//control state variables
+bool next = false;
+bool pause = false;
 
 //song name buffer
 char song_name[SIZE][13];
 int song_count = 0;
 int current_song = 0;
+
 //freertos variables
-// QueueHandle_t data_queue;
+QueueHandle_t data_queue;
+SemaphoreHandle_t decoder_lock;
+
 //decoder
 LabGPIO Xdcs(2,0);  // VS1053 Data Select
 LabGPIO Dreq(2,2);  // VS1053 Data Request Interrupt Pin
@@ -39,8 +45,22 @@ LabGPIO Mp3cs(2,5); // VS1053 Chip Select
 LabGPIO Sdcs(2,7);  // SD Card Chip Select
 LabGPIO Reset(2,9); //VS1053 hardware reset
 decoder decode(&Xdcs,&Dreq,&Mp3cs,&Sdcs,&Reset);
-// uint8_t song_buffer[512];
+uint16_t VOL = 0x4040;
+uint16_t BASS = 0x00;
 
+//command line
+CommandList_t<32> command_list;
+RtosCommand rtos_command;
+CommandLine<command_list> ci;
+
+
+void TerminalTask(void * ptr)
+{
+  LOG_INFO("Press Enter to Start Command Line!");
+  ci.WaitForInput();
+  LOG_WARNING("\nUser has quit from terminal!");
+  vTaskDelete(nullptr);
+}
 
 bool isMP3(char* file_name){
 	int size = strlen(file_name);
@@ -52,112 +72,110 @@ bool isMP3(char* file_name){
 	return false;
 }
 
-void decoderTask(void* p){
-	UINT bytes_read;
-	uint8_t data_buffer[2048];
-
-	while(1){
-	bytes_read = 2048;
-	// f_open(&fil,"four4.mp3",FA_READ);
-    f_open(&fil,song_name[current_song],FA_READ);
-    
-	while(bytes_read == 2048){
-		f_read(&fil,data_buffer,2048,&bytes_read);
-		//printf("send\n");
-        decode.send_data(data_buffer,bytes_read);
-	}
-	f_close(&fil);
-	vTaskSuspend(NULL);
+void bass_up(){
+	if((BASS & 0xff) <= 0xE0){
+		BASS += 0x10;
+		xSemaphoreTakeFromISR(decoder_lock,nullptr);
+		decode.write_reg(VS1053_REG_BASS,BASS);
+		xSemaphoreGiveFromISR(decoder_lock,nullptr);
 	}
 }
 
-// void readFileTask(void *p){
-// 	UINT bytes_read = 512;
-// 	uint8_t data_buffer[512];
-// 	bool first_song = false;
-//     while(1){
-//     	// if(!first_song){
-//     	// 	//open first song
-//     	// 	f_open(&fil,song_name[0],FA_READ);
-//     	// } 
-//     	//for testing
-//   //   	printf("trying to open file\n");
-// 		// FRESULT fr = f_open(&fil,"four4.mp3",FA_READ);
-// 		// if(fr == FR_OK){
-// 		// 	printf("open file success\n");
-// 		// }
-// 		// else{
-// 		// 	printf("open file failed\n");
-// 		// }
-//     	// vTaskSuspendAll();
-//     	while(1){
-//     		vTaskSuspendAll();
-//     		f_open(&fil,"four4.mp3",FA_READ);
-//     		f_read(&fil,data_buffer,512,&bytes_read);
-// 	    	printf("sending 512 bytes\n");
-// 	        xQueueSend(data_queue,&data_buffer,portMAX_DELAY);
-// 	         if(bytes_read != 512){
-// 	        		break;
-//       	  	}
-//       	  	f_close(&fil);
-//       	  	xTaskResumeAll();
-//     	}
-//     	vTaskSuspend(NULL);
+void bass_down(){
+	if((BASS & 0xFF) >= 0x10){
+		BASS -+ 0x10;
+		xSemaphoreTakeFromISR(decoder_lock,nullptr);
+		decode.write_reg(VS1053_REG_BASS,BASS);
+		xSemaphoreGiveFromISR(decoder_lock,nullptr);
+	}
+}
 
-//         // xTaskResumeAll();
-//         // if(nextSong == true && song_count != 0){
-//         // 	f_close(&fil);
-//         // 	if(++current_song == song_count) current_song = 0;
-//         // 	f_open(&fil,song_name[current_song],FA_READ);
-//         // 	nextSong = false;
-//         // }
-//         // else if(song_count != 0){
-//         // 	f_read(&fil,data_buffer,512,&bytes_read);
-//         // 	if(bytes_read != 512){
-//         // 		nextSong = true;
-//         // 	}
-//         // 	xQueueSend(data_queue,&data_buffer,portMAX_DELAY);
+void trebble_up(){
+	if(((BASS>>8) & 0xFF) <= 0xE0){
+		BASS += 0x1000;
+		xSemaphoreTakeFromISR(decoder_lock,nullptr);
+		decode.write_reg(VS1053_REG_BASS,BASS);
+		xSemaphoreGiveFromISR(decoder_lock,nullptr);
+	}
+}
 
-//         // 	// for(int i=0; i<bytes_read; i++){
-//         // 	// 	xQueueSend(data_queue,&data_buffer[i],portMAX_DELAY);	
-//         // 	// }
-//         // }
-//     }
-// }
+void trebble_down(){
+	if(((BASS>>8) & 0xFF) >= 0x10){
+		BASS -= 0x1000;
+		xSemaphoreTakeFromISR(decoder_lock,nullptr);
+		decode.write_reg(VS1053_REG_BASS,BASS);
+		xSemaphoreGiveFromISR(decoder_lock,nullptr);
+	}
+}
 
-// void SendDataTask(void *p){
-// 	uint8_t buffer[512];
-// 	while(1){
-// 		xQueueReceive(data_queue,&buffer,100);
-// 		//printf("sending data to decoder\n");
-// 		decode.send_data(buffer,512);
-// 		vTaskDelay(10);
-// 	}
-// }
+void vol_up(){
+	if(VOL >= 0x1010){
+		VOL -= 0x1010;
+		xSemaphoreTakeFromISR(decoder_lock,nullptr);
+		decode.write_reg(VS1053_REG_VOLUME,VOL);
+		xSemaphoreGiveFromISR(decoder_lock,nullptr);
+	}
+}
+
+void vol_down(){
+	if(VOL <= 0xEEEE){
+		VOL += 0x1010;
+		xSemaphoreTakeFromISR(decoder_lock,nullptr);
+		decode.write_reg(VS1053_REG_VOLUME,VOL);
+		xSemaphoreGiveFromISR(decoder_lock,nullptr);
+	}
+}
+
+void readFileTask(void *p){
+	UINT bytes_read = 1024;
+	uint8_t data_buffer[1024]={};
+    while(1){
+    	f_open(&fil,song_name[current_song],FA_READ);
+    	while(!next){
+    		while(pause);
+    		f_read(&fil,data_buffer,1024,&bytes_read);
+	    	//printf("sending 1024 bytes\n");
+	        xQueueSend(data_queue,&data_buffer,portMAX_DELAY);
+	        if(bytes_read != 1024){
+	        		break;
+      	  	} 
+      	  	vTaskDelay(10);	
+    	}
+    	f_close(&fil);
+    	current_song++;
+    }
+}
+
+void SendDataTask(void *p){
+	uint8_t buffer[1024];
+	while(1){
+		if(xQueueReceive(data_queue,&buffer,100) == pdTRUE){
+			//printf("sending data to decoder\n");
+			xSemaphoreTakeFromISR(decoder_lock,nullptr);
+			decode.send_data(buffer,1024);
+			xSemaphoreGiveFromISR(decoder_lock,nullptr);
+		}
+		vTaskDelay(1);
+	}
+}
 
 
 int main(){
-	//mounting sd card
-	printf("start mounting\n");
-	f_mount(&fat_fs,"",0);
-
-
-	// decoder setup
-	decode.init();
-
-
 	// int size = sizeof(HelloSampleMP3);
  //    while(1){
  //        decode.send_data(HelloSampleMP3,size);
  //        Delay(500);
  //    }
-	
 
-	
+	//mounting sd card
+	printf("start mounting\n");
+	f_mount(&fat_fs,"",0);
+
 	//open root directory
 	printf("start scanning\n");
 	FRESULT res = f_opendir(&dir,"/");
 
+	//scan for mp3 file
 	if(res == FR_OK){
 		for(;;){
 			res = f_readdir(&dir,&fno);
@@ -184,32 +202,28 @@ int main(){
 		}	
 	}
 	f_closedir(&dir);
+	//exit if no song found
+	if(song_count == 0) exit(1);
+
+	// decoder setup
+	decode.init();
 
 	//remounting sd card
 	printf("start mounting\n");
 	f_mount(&fat_fs,"",0);
 
+	//add rtos command
+	ci.AddCommand(&rtos_command);
+	ci.Initialize();
 
-	// data_queue = xQueueCreate(10,sizeof(song_buffer));
+	decoder_lock = xSemaphoreCreateMutex();
+	data_queue = xQueueCreate(4,1024);
 
-	xTaskCreate(decoderTask,"decoder",1024,(void*)1,rtos::Priority::kMedium,nullptr);
-
-	// xTaskCreate(readFileTask,"SD_Read",1024,(void*)1,rtos::Priority::kMedium,nullptr);
-	// xTaskCreate(SendDataTask,"Decode_Send",1024,(void*)1,rtos::Priority::kMedium,nullptr);
+	xTaskCreate(TerminalTask, "Terminal", 501, nullptr, rtos::kLow, nullptr);
+	xTaskCreate(readFileTask,"SD_Read",1024,(void*)1,rtos::Priority::kMedium,nullptr);
+	xTaskCreate(SendDataTask,"Decode_Send",1024,(void*)1,rtos::Priority::kMedium,nullptr);
 	vTaskStartScheduler();
-
-	while(1);
-
-	//send a mp3 file to decoder for testing
-	UINT bytes_read = 2048;
-	uint8_t data_buffer[2048];
-	// f_open(&fil,"four4.mp3",FA_READ);
-    f_open(&fil,"one1.mp3",FA_READ);
-	while(bytes_read == 2048){
-		f_read(&fil,data_buffer,2048,&bytes_read);
-		//printf("send\n");
-        decode.send_data(data_buffer,bytes_read);
-	}
-	f_close(&fil);
+	
+	while(1);	
 	return 0;
 }
