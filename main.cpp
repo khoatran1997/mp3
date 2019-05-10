@@ -172,7 +172,9 @@ void decodeTask(void *p){
 		bytes_read = 2048;
 		while(bytes_read == 2048){
 			f_read(&fil,data_buffer,2048,&bytes_read);
+			xSemaphoreTakeFromISR(decoder_lock,nullptr);
 			decode.send_data(data_buffer,bytes_read);
+			xSemaphoreGiveFromISR(decoder_lock,nullptr);
 			vTaskDelay(25);
 		}
 		f_close(&fil);
@@ -261,7 +263,7 @@ int main(){
 	ci.AddCommand(&rtos_command);
 	ci.Initialize();
 
-	// decoder_lock = xSemaphoreCreateMutex();
+	decoder_lock = xSemaphoreCreateMutex();
 	// data_queue = xQueueCreate(4,1024);
 
 	xTaskCreate(TerminalTask, "Terminal", 501, nullptr, rtos::Priority::kLow, nullptr);
