@@ -251,9 +251,9 @@ public:
 			while(!dreq->ReadBool());
             //printf("%i\n", counter);
 			for(int i = 0; i<32; i++){
-                //printf("%x\n", data[counter]);
+                //printf("%x\n", data[counter++]);
 				spi.Transfer(data[counter++]);
-				if(counter >= size) break;
+				//if(counter >= size) break;
 			}
 		}
         xdcs->SetHigh();
