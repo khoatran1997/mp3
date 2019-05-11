@@ -192,13 +192,13 @@ uint8_t HelloSampleMP3[] = { 0xFF, 0xF2, 0x40, 0xC0, 0x19, 0xB7, 0x00, 0x14, 0x0
 
 class decoder{
 public:
-	decoder(LabGPIO *Xdcs, LabGPIO *Dreq, LabGPIO *Mp3cs, LabGPIO *Sdcs,LabGPIO *Reset){
-		xdcs = Xdcs;
-		dreq = Dreq;
-		mp3cs = Mp3cs;
-		sdcs = Sdcs;
-		reset = Reset;
-	}
+    decoder(Lab_GPIO *Xdcs, Lab_GPIO *Dreq, Lab_GPIO *Mp3cs, Lab_GPIO *Sdcs,Lab_GPIO *Reset){
+        xdcs = Xdcs;
+        dreq = Dreq;
+        mp3cs = Mp3cs;
+        sdcs = Sdcs;
+        reset = Reset;
+    }
 
     // void data_enable(){
     //     xdcs->SetLow();
@@ -207,19 +207,19 @@ public:
     // void data_disable(){
     //     xdcs->SetHigh();
     // }
-	void init(){
-		spi.Initialize((uint8_t)8,LabSpi::FrameModes::spi,(uint8_t)20);
+    void init(){
+        spi.Initialize((uint8_t)8,LabSpi::FrameModes::spi,(uint8_t)20);
 
-		dreq->SetAsInput();
-		xdcs->SetAsOutput();
-		sdcs->SetAsOutput();
-		mp3cs->SetAsOutput();
-		reset->SetAsOutput();
+        dreq->SetAsInput();
+        xdcs->SetAsOutput();
+        sdcs->SetAsOutput();
+        mp3cs->SetAsOutput();
+        reset->SetAsOutput();
 
-		mp3cs->SetHigh();
-		sdcs->SetHigh();
-		xdcs->SetHigh();
-		reset->SetHigh();
+        mp3cs->SetHigh();
+        sdcs->SetHigh();
+        xdcs->SetHigh();
+        reset->SetHigh();
 
         hardware_reset();
         // software_reset();
@@ -230,7 +230,7 @@ public:
 
         write_reg(VS1053_REG_CLOCKF,0xE000);
         Delay(10);
-	}
+    }
 
     //sine wave test for 5s
     void test(){
@@ -243,21 +243,21 @@ public:
     }
 
 
-	void send_data(uint8_t data[],int size){
+    void send_data(uint8_t data[],int size){
         //printf("send data size %i\n", size);
-		int counter = 0;
+        int counter = 0;
         xdcs->SetLow();
-		while(counter<size){
-			while(!dreq->ReadBool());
+        while(counter<size){
+            while(!dreq->ReadBool());
             //printf("%i\n", counter);
-			for(int i = 0; i<32; i++){
+            for(int i = 0; i<32; i++){
                 //printf("%x\n", data[counter++]);
-				spi.Transfer(data[counter++]);
-				//if(counter >= size) break;
-			}
-		}
+                spi.Transfer(data[counter++]);
+                //if(counter >= size) break;
+            }
+        }
         xdcs->SetHigh();
-	}
+    }
 
     uint16_t read_reg(uint8_t address){
         uint8_t d[2];
@@ -288,13 +288,13 @@ public:
         mp3cs->SetHigh();
     }
 
-	void hardware_reset(){
+    void hardware_reset(){
         Delay(100);
-		reset->SetLow();
-		Delay(100);
-		reset->SetHigh();
+        reset->SetLow();
         Delay(100);
-	}
+        reset->SetHigh();
+        Delay(100);
+    }
 
     // void software_reset(){
     //     write_reg(VS1053_REG_MODE,0x0004);
@@ -302,10 +302,10 @@ public:
     // }
 
 private:
-	LabSpi spi;
-	LabGPIO* xdcs;
-	LabGPIO* dreq;
-	LabGPIO* mp3cs;
-	LabGPIO* sdcs;
-	LabGPIO* reset;
+    LabSpi spi;
+    Lab_GPIO* xdcs;
+    Lab_GPIO* dreq;
+    Lab_GPIO* mp3cs;
+    Lab_GPIO* sdcs;
+    Lab_GPIO* reset;
 };
