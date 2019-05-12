@@ -25,32 +25,25 @@ void toggleFunction();
 void interruptLED1();
 uint64_t delay = 5;
 
-  // Initialize button and led here
-  Lab_GPIO LED0(1, 18);
+// Initialize button and led here
+Lab_GPIO LED0(1, 18);
+Lab_GPIO SW3(0, 29); // toggle
+Lab_GPIO LED1(1, 24);
+Lab_GPIO SW2(0, 30); // select
+Lab_GPIO LED2(1, 26);
+Lab_GPIO SW1(1, 15);  //Needs pull down resistor (-)
+Lab_GPIO LED3(2, 3);
+Lab_GPIO SW0(1, 19);  //Needs pull down resistor (+)
 
-  Lab_GPIO SW3(0, 29); // toggle
+uint16_t vol = 0; 
+uint16_t bass = 0;
+int treble = 0;
+bool pause = false;
+int toggle = 0;
+//int shuffle = 0;
 
-  Lab_GPIO LED1(1, 24);
+OledTerminal oledterm;
 
-  Lab_GPIO SW2(0, 30); // select
-
-  Lab_GPIO LED2(1, 26);
-
-  Lab_GPIO SW1(1, 15);  //Needs pull down resistor (-)
-
-
-  Lab_GPIO LED3(2, 3);
-
-  Lab_GPIO SW0(1, 19);  //Needs pull down resistor (+)
-
-      uint16_t vol = 0; 
-      uint16_t bass = 0;
-      int treble = 0;
-      bool pause = false;
-      int toggle = 0;
-      //int shuffle = 0;
-
-  OledTerminal oledterm;
 void interruptSwitch()
 {
   printf("Interrupting Switch.\n");
@@ -61,26 +54,23 @@ void toggleFunction() //use SW0
 {
   //oledterm.printf("Toggling Function\n");
   if(LED0.ReadBool() == true | LED0.ReadBool() == false){
-
-      Delay(50);
-      oledterm.Clear();
-      toggle +=1;
-      if(toggle > 4)
-      {
-        toggle = 0;
-        //ledterm.printf("Resetting toggle to 0.\n");
-      }
-      if(toggle == 0) oledterm.printf("Volume Crtl");
-      if(toggle == 1) oledterm.printf("Bass Crtl\n");
-      if(toggle == 2) oledterm.printf("Treble Crtl\n"); 
-      if(toggle == 3) oledterm.printf("Next/Prev Crtl\n"); 
-      if(toggle == 4) oledterm.printf("Shuffle Crtl\n"); 
-      }
+    Delay(50);
+    oledterm.Clear();
+    toggle +=1;
+    if(toggle > 4){
+      toggle = 0;
+      //ledterm.printf("Resetting toggle to 0.\n");
+    }
+    if(toggle == 0) oledterm.printf("Volume Crtl\n");
+    if(toggle == 1) oledterm.printf("Bass Crtl\n");
+    if(toggle == 2) oledterm.printf("Treble Crtl\n"); 
+    if(toggle == 3) oledterm.printf("Next/Prev Crtl\n"); 
+    if(toggle == 4) oledterm.printf("Shuffle Crtl\n"); 
+  }
     //oledterm.printf("LED 0\n");
                         //LED0.SetLow();
   Delay(100);
 }
-
 
 //FATFS variables
 FATFS fat_fs;
@@ -93,7 +83,7 @@ bool next = false;
 // bool pause = false;
 
 //song name buffer
-char song_name[SIZE][13];
+char song_name[SIZE][100];
 int song_count = 0;
 int current_song = 0;
 
@@ -111,28 +101,28 @@ decoder decode(&Xdcs,&Dreq,&Mp3cs,&Sdcs,&Reset);
 uint16_t VOL = 0x4040;
 uint16_t BASS = 0x00;
 
-namespace
-{
-//command line
-CommandList_t<32> command_list;
-RtosCommand rtos_command;
-CommandLine<command_list> ci;
-//LpcSystemInfoCommand system_command;
-void TerminalTask(void * ptr)
-{
-  LOG_INFO("Press Enter to Start Command Line!");
-  ci.WaitForInput();
-  LOG_WARNING("\nUser has quit from terminal!");
-  vTaskDelete(nullptr);
-}
-
+namespace {
+  //command line
+  CommandList_t<32> command_list;
+  RtosCommand rtos_command;
+  CommandLine<command_list> ci;
+  //LpcSystemInfoCommand system_command;
+  void TerminalTask(void * ptr){
+    LOG_INFO("Press Enter to Start Command Line!");
+    ci.WaitForInput();
+    LOG_WARNING("\nUser has quit from terminal!");
+    vTaskDelete(nullptr);
+  }
 }
 
 bool isMP3(char* file_name){
+  if(file_name[0] == '.'){ //check for hidden files (i.e ._FILENAME)
+    return false;
+  }
   int size = strlen(file_name);
   char* point = strrchr(file_name,'.');//points to the last occurance of .
   if(point != NULL){
-    return (strcmp(point,".MP3") == 0);
+    return ((strcmp(point,".mp3") == 0) || (strcmp(point,".MP3") == 0));
   }
   printf("error\n");
   return false;
@@ -192,189 +182,170 @@ void vol_down(){
   }
 }
 
-void interruptLED1() // go control
-{
-
-      switch(toggle)
+void interruptLED1(){ // go control
+  switch(toggle){
+    case 0: //volume
+      if(SW1.ReadBool())//volume down
       {
-        case 0: 
-          if(SW1.ReadBool())
-          {
-            if(vol <= 0){
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Volume: 0\n");
-          }
-            else if(vol > 0){
-            vol -= 1;
-            vol_down();
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Volume: %i\n", vol);
-          }
+        if(vol <= 0){
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Volume: 0\n");
         }
-          else if(SW0.ReadBool())
-          {
-            if(vol >= 10){
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Volume: 10\n");
-            }
-            else if(vol < 10){
-              vol += 1;
-              vol_up();
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Volume: %i\n", vol);
-            }
-
-          }
-
-          else {
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Toggle Play/Pause\n");
-          }
-        Delay(50);
-          break;
-
-
-        case 1: //bass
-          if(SW1.ReadBool())
-          {
-            if(bass <= 0){
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Bass: 0\n");
-          }
-            else if(bass > 0){
-            bass -= 1;
-            bass_down();
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Bass: %i\n", bass);
-          }
+        else if(vol > 0){
+          vol -= 1;
+          vol_down();
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Volume: %i\n", vol);
         }
-          else if(SW0.ReadBool())
-          {
-            if(bass >= 10){
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Bass: 10\n");
-            }
-            else if(bass < 10){
-              bass += 1;
-              bass_up();
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Bass: %i\n", bass);
-            }
-
-          }
-
-          else {
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Toggle Play/Pause\n");
-          }
-        Delay(50);
-          break; 
-
-
-        case 2: //treble
-          if(SW1.ReadBool())
-          {
-            if(treble <= 0){
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Treble: 0\n");
-          }
-            else if(treble > 0){
-            treble -= 1;
-            trebble_down();
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Treble: %i\n", treble);
-          }
-        }
-          else if(SW0.ReadBool())
-          {
-            if(treble >= 10){
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Treble: 10\n");
-            }
-            else if(treble < 10){
-              treble += 1;
-              trebble_up();
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-              oledterm.printf("Treble: %i\n", treble);
-            }
-
-          }
-
-          else {
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Toggle Play/Pause\n");
-          }
-        Delay(50);
-          break; 
-
-
-        case 3: //next/prev
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Toggle Play/Pause\n");
-        //   if(SW1.ReadBool())
-        //   {
-        //     if(bass <= 0){
-        //       oledterm.printf("Bass: 0\n");
-        //   }
-        //     else if(bass > 0){
-        //     bass -= 1;
-        //     oledterm.printf("Bass: %i\n", bass);
-        //   }
-        // }
-        //   if(SW0.ReadBool())
-        //   {
-        //     if(bass >= 10){
-        //       oledterm.printf("Bass: 10\n");
-        //     }
-        //     else if(bass < 10){
-        //       bass += 1;
-        //       oledterm.printf("Bass: %i\n", bass);
-        //     }
-
-        //   }
-        // Delay(50);
-          break; 
-
-        case 4: //shuffle
-          if(SW1.ReadBool())
-          {
-            //shuffle = 0;
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Shuffle off.\n");
-        }
-          else if(SW0.ReadBool())
-          {
-            //shuffle = 1;
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Shuffle on.\n");
-          }
-
-          else {
-              oledterm.Clear();
-              oledterm.printf("SongPlaceholder\n");
-            oledterm.printf("Toggle Play/Pause\n");
-          }
-        Delay(50);
-          break;
       }
+      else if(SW0.ReadBool())//volume up
+      {
+        if(vol >= 10){
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Volume: 10\n");
+        }
+        else if(vol < 10){
+          vol += 1;
+          vol_up();
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Volume: %i\n", vol);
+        }
+      }
+      else{
+        oledterm.Clear();
+        oledterm.printf("SongPlaceholder\n");
+        oledterm.printf("Toggle Play/Pause\n");
+      }
+      Delay(50);
+      break;
+
+    case 1: //bass
+      if(SW1.ReadBool()){//bass down
+        if(bass <= 0){
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Bass: 0\n");
+        }
+        else if(bass > 0){
+          bass -= 1;
+          bass_down();
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Bass: %i\n", bass);
+        }
+      }
+      else if(SW0.ReadBool()){//bass up
+        if(bass >= 10){
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Bass: 10\n");
+        }
+        else if(bass < 10){
+          bass += 1;
+          bass_up();
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Bass: %i\n", bass);
+        }
+      }
+      else{
+        oledterm.Clear();
+        oledterm.printf("SongPlaceholder\n");
+        oledterm.printf("Toggle Play/Pause\n");
+      }
+      Delay(50);
+      break; 
+
+    case 2: //treble
+      if(SW1.ReadBool()){
+        if(treble <= 0){
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Treble: 0\n");
+        }
+        else if(treble > 0){
+          treble -= 1;
+          trebble_down();
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Treble: %i\n", treble);
+        }
+      }
+      else if(SW0.ReadBool()){
+        if(treble >= 10){
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Treble: 10\n");
+        }
+        else if(treble < 10){
+          treble += 1;
+          trebble_up();
+          oledterm.Clear();
+          oledterm.printf("SongPlaceholder\n");
+          oledterm.printf("Treble: %i\n", treble);
+        }
+      }
+      else {
+        oledterm.Clear();
+        oledterm.printf("SongPlaceholder\n");
+        oledterm.printf("Toggle Play/Pause\n");
+      }
+      Delay(50);
+      break; 
+
+    case 3: //next/prev
+      oledterm.Clear();
+      oledterm.printf("SongPlaceholder\n");
+      oledterm.printf("Toggle Play/Pause\n");
+    //   if(SW1.ReadBool())
+    //   {
+    //     if(bass <= 0){
+    //       oledterm.printf("Bass: 0\n");
+    //   }
+    //     else if(bass > 0){
+    //     bass -= 1;
+    //     oledterm.printf("Bass: %i\n", bass);
+    //   }
+    // }
+    //   if(SW0.ReadBool())
+    //   {
+    //     if(bass >= 10){
+    //       oledterm.printf("Bass: 10\n");
+    //     }
+    //     else if(bass < 10){
+    //       bass += 1;
+    //       oledterm.printf("Bass: %i\n", bass);
+    //     }
+
+    //   }
+    // Delay(50);
+      break; 
+
+    case 4: //shuffle
+      if(SW1.ReadBool()){
+        //shuffle = 0;
+        oledterm.Clear();
+        oledterm.printf("SongPlaceholder\n");
+        oledterm.printf("Shuffle off.\n");
+      }
+      else if(SW0.ReadBool()){
+        //shuffle = 1;
+        oledterm.Clear();
+        oledterm.printf("SongPlaceholder\n");
+        oledterm.printf("Shuffle on.\n");
+      }
+      else {
+        oledterm.Clear();
+        oledterm.printf("SongPlaceholder\n");
+        oledterm.printf("Toggle Play/Pause\n");
+      }
+      Delay(50);
+      break;
+  }
 }
 
 // void readFileTask(void *p){
@@ -426,13 +397,12 @@ void decodeTask(void *p){
     }
     f_close(&fil);
     vTaskDelay(100);
+    current_song++;
   }
-
 }
 
-
 int main(){
-    oledterm.Initialize();
+  oledterm.Initialize();
   oledterm.printf("OLED Initialized...\n");
   SW1.resetResistor();
   SW1.enablePullDownResistor();
@@ -458,7 +428,7 @@ int main(){
 
   //mounting sd card
   printf("start mounting\n");
-  f_mount(&fat_fs,"",0);
+  f_mount(&fat_fs,"",1);
 
   //open root directory
   printf("start scanning\n");
@@ -490,13 +460,19 @@ int main(){
       }
     } 
   }
+  printf("TEST: \n");
+  int songnum = 1;
+  for(int i=0;i<SIZE;i++){
+    printf("%i.%s \n",songnum,song_name[i]);
+    songnum++;
+  }
   f_closedir(&dir);
   //exit if no song found
   if(song_count == 0) exit(1);
 
   //remounting sd card
   printf("start mounting\n");
-  f_mount(&fat_fs,"",0);
+  f_mount(&fat_fs,"",1);
 
   // decoder setup
   decode.init();
@@ -518,10 +494,8 @@ int main(){
   //    }
   //    f_close(&fil);
 
-
-
   //add rtos command
-    LOG_INFO("Adding rtos command to command line...");
+  LOG_INFO("Adding rtos command to command line...");
   ci.AddCommand(&rtos_command);
   ci.Initialize();
 
