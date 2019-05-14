@@ -200,15 +200,8 @@ public:
         reset = Reset;
     }
 
-    // void data_enable(){
-    //     xdcs->SetLow();
-    // }
-
-    // void data_disable(){
-    //     xdcs->SetHigh();
-    // }
     void init(){
-        spi.Initialize((uint8_t)8,LabSpi::FrameModes::spi,(uint8_t)20);
+        spi.Initialize((uint8_t)8,LabSpi::FrameModes::spi,(uint8_t)16);
 
         dreq->SetAsInput();
         xdcs->SetAsOutput();
@@ -220,15 +213,13 @@ public:
         sdcs->SetHigh();
         xdcs->SetHigh();
         reset->SetHigh();
-
         hardware_reset();
-        // software_reset();
 
-        write_reg(VS1053_REG_VOLUME,0x4242);
+        write_reg(VS1053_REG_VOLUME,0x4040);
         Delay(10);
-        // printf("init done\n");
-
         write_reg(VS1053_REG_CLOCKF,0xE000);
+        Delay(10);
+        write_reg(VS1053_REG_BASS,0x7af6);
         Delay(10);
     }
 
@@ -244,7 +235,6 @@ public:
 
 
     void send_data(uint8_t data[],int size){
-        //printf("send data size %i\n", size);
         int counter = 0;
         xdcs->SetLow();
         while(counter<size){
@@ -255,6 +245,7 @@ public:
                 spi.Transfer(data[counter++]);
                 //if(counter >= size) break;
             }
+            while(!dreq->ReadBool());
         }
         xdcs->SetHigh();
     }
@@ -276,7 +267,6 @@ public:
     }
 
     void write_reg(uint8_t address, uint16_t data){
-        //printf("write reg address %x data %x\n", address,data);
         uint8_t h_byte = data>>8;
         uint8_t l_byte = data;
         while(!dreq->ReadBool());
@@ -286,6 +276,7 @@ public:
         spi.Transfer(h_byte);//MSB
         spi.Transfer(l_byte);//LSB
         mp3cs->SetHigh();
+        while(!dreq->ReadBool());
     }
 
     void hardware_reset(){
@@ -295,11 +286,6 @@ public:
         reset->SetHigh();
         Delay(100);
     }
-
-    // void software_reset(){
-    //     write_reg(VS1053_REG_MODE,0x0004);
-    //     Delay(100);
-    // }
 
 private:
     LabSpi spi;

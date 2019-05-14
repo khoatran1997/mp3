@@ -20,57 +20,16 @@
 #include "L3_Application/commands/common.hpp"
 #define SIZE 20//size of song name buffer
 
-void interruptSwitch();
-void toggleFunction();
-void interruptLED1();
-uint64_t delay = 5;
 
 // Initialize button and led here
-Lab_GPIO LED0(1, 18);
 Lab_GPIO SW3(0, 29); // toggle
-Lab_GPIO LED1(1, 24);
 Lab_GPIO SW2(0, 30); // select
-Lab_GPIO LED2(1, 26);
 Lab_GPIO SW1(1, 15);  //Needs pull down resistor (-)
-Lab_GPIO LED3(2, 3);
 Lab_GPIO SW0(1, 19);  //Needs pull down resistor (+)
 
-uint16_t vol = 0; 
-uint16_t bass = 0;
-int treble = 0;
-bool pause = false;
-int toggle = 0;
-//int shuffle = 0;
 
 OledTerminal oledterm;
 
-void interruptSwitch()
-{
-  printf("Interrupting Switch.\n");
-  Delay(100);
-}
-
-void toggleFunction() //use SW0
-{
-  //oledterm.printf("Toggling Function\n");
-  if(LED0.ReadBool() == true | LED0.ReadBool() == false){
-    Delay(50);
-    oledterm.Clear();
-    toggle +=1;
-    if(toggle > 4){
-      toggle = 0;
-      //ledterm.printf("Resetting toggle to 0.\n");
-    }
-    if(toggle == 0) oledterm.printf("Volume Crtl\n");
-    if(toggle == 1) oledterm.printf("Bass Crtl\n");
-    if(toggle == 2) oledterm.printf("Treble Crtl\n"); 
-    if(toggle == 3) oledterm.printf("Next/Prev Crtl\n"); 
-    if(toggle == 4) oledterm.printf("Shuffle Crtl\n"); 
-  }
-    //oledterm.printf("LED 0\n");
-                        //LED0.SetLow();
-  Delay(100);
-}
 
 //FATFS variables
 FATFS fat_fs;
@@ -80,7 +39,18 @@ FILINFO fno;
 
 //control state variables
 bool next = false;
-// bool pause = false;
+bool pause = false;
+bool prev = false;
+bool sw3pressed=false;
+bool sw2pressed=false;
+int vol = 12; 
+uint16_t bass = 8;
+int treble = 16;
+int toggle = 0;
+uint16_t VOL = 0x4040;
+uint16_t BASS = 0x7af6;
+int seed = 0;
+char setting[5][10]={"volume","bass","trebble","next/prev","shuffle"};
 
 //song name buffer
 char song_name[SIZE][100];
@@ -88,8 +58,11 @@ int song_count = 0;
 int current_song = 0;
 
 //freertos variables
-QueueHandle_t data_queue;
+// QueueHandle_t data_queue;
 SemaphoreHandle_t decoder_lock;
+SemaphoreHandle_t display_lock;
+
+bool shuffle=false;
 
 //decoder
 Lab_GPIO Xdcs(2,0);  // VS1053 Data Select
@@ -98,8 +71,6 @@ Lab_GPIO Mp3cs(2,5); // VS1053 Chip Select
 Lab_GPIO Sdcs(2,7);  // SD Card Chip Select
 Lab_GPIO Reset(2,9); //VS1053 hardware reset
 decoder decode(&Xdcs,&Dreq,&Mp3cs,&Sdcs,&Reset);
-uint16_t VOL = 0x4040;
-uint16_t BASS = 0x00;
 
 namespace {
   //command line
@@ -115,6 +86,9 @@ namespace {
   }
 }
 
+
+
+
 bool isMP3(char* file_name){
   if(file_name[0] == '.'){ //check for hidden files (i.e ._FILENAME)
     return false;
@@ -129,275 +103,231 @@ bool isMP3(char* file_name){
 }
 
 void bass_up(){
-  if((BASS & 0xff) <= 0xE0){
+  if(bass<16){
     BASS += 0x10;
-    xSemaphoreTakeFromISR(decoder_lock,nullptr);
+    bass++;
+    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
     xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void bass_down(){
-  if((BASS & 0xFF) >= 0x10){
+  if(bass>0){
     BASS -= 0x10;
-    xSemaphoreTakeFromISR(decoder_lock,nullptr);
+    bass--;
+    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
     xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void trebble_up(){
-  if(((BASS>>8) & 0xFF) <= 0xE0){
+  if(treble<16){
     BASS += 0x1000;
-    xSemaphoreTakeFromISR(decoder_lock,nullptr);
+    treble++;
+    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
     xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void trebble_down(){
-  if(((BASS>>8) & 0xFF) >= 0x10){
+  if(treble>0){
     BASS -= 0x1000;
-    xSemaphoreTakeFromISR(decoder_lock,nullptr);
+    treble--;
+    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
     xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void vol_up(){
-  if(VOL >= 0x1010){
+  if(vol<16){
+    printf("vol up isr called\n");
     VOL -= 0x1010;
-    xSemaphoreTakeFromISR(decoder_lock,nullptr);
+    vol++;
+    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_VOLUME,VOL);
     xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void vol_down(){
-  if(VOL <= 0xEEEE){
+  if(vol>0){
     VOL += 0x1010;
-    xSemaphoreTakeFromISR(decoder_lock,nullptr);
+    vol--;
+    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_VOLUME,VOL);
     xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
+void toggleFunction() //use SW0
+{
+  if(SW3.ReadBool() && !sw3pressed){
+    sw3pressed = true;
+  }
+  else if(!SW3.ReadBool() && sw3pressed){
+    sw3pressed = false;
+    toggle +=1;
+    if(toggle > 4){
+      toggle = 0;
+    }
+    xSemaphoreGiveFromISR(display_lock,nullptr);
+  }
+  //vTaskDelay(10);
+    //vTaskDelay(500);
+}
+
 void interruptLED1(){ // go control
+  if(SW2.ReadBool() && !sw2pressed){
+    sw2pressed = true;
+  }
+  else if(!SW2.ReadBool() && sw2pressed){
+    sw2pressed = false;
+    taskENTER_CRITICAL();
   switch(toggle){
     case 0: //volume
       if(SW1.ReadBool())//volume down
       {
-        if(vol <= 0){
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Volume: 0\n");
-        }
-        else if(vol > 0){
-          vol -= 1;
-          vol_down();
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Volume: %i\n", vol);
-        }
+        vol_down();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // voldown = true;
+        // display = true;
       }
       else if(SW0.ReadBool())//volume up
       {
-        if(vol >= 10){
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Volume: 10\n");
-        }
-        else if(vol < 10){
-          vol += 1;
-          vol_up();
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Volume: %i\n", vol);
-        }
+        vol_up();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // volup = true;
+        // display = true;
       }
       else{
-        oledterm.Clear();
-        oledterm.printf("SongPlaceholder\n");
-        oledterm.printf("Toggle Play/Pause\n");
+          pause = !pause;
       }
-      Delay(50);
       break;
 
     case 1: //bass
       if(SW1.ReadBool()){//bass down
-        if(bass <= 0){
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Bass: 0\n");
-        }
-        else if(bass > 0){
-          bass -= 1;
-          bass_down();
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Bass: %i\n", bass);
-        }
+        bass_down();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // bdown = true;
+        // display = true;
       }
       else if(SW0.ReadBool()){//bass up
-        if(bass >= 10){
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Bass: 10\n");
-        }
-        else if(bass < 10){
-          bass += 1;
-          bass_up();
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Bass: %i\n", bass);
-        }
+        bass_up();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // bup = true;
+        // display = true;
       }
       else{
-        oledterm.Clear();
-        oledterm.printf("SongPlaceholder\n");
-        oledterm.printf("Toggle Play/Pause\n");
+        pause = !pause;
       }
-      Delay(50);
+
       break; 
 
     case 2: //treble
       if(SW1.ReadBool()){
-        if(treble <= 0){
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Treble: 0\n");
-        }
-        else if(treble > 0){
-          treble -= 1;
-          trebble_down();
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Treble: %i\n", treble);
-        }
+        trebble_down();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // tredown = true;
+        // display = true;
       }
       else if(SW0.ReadBool()){
-        if(treble >= 10){
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Treble: 10\n");
-        }
-        else if(treble < 10){
-          treble += 1;
-          trebble_up();
-          oledterm.Clear();
-          oledterm.printf("SongPlaceholder\n");
-          oledterm.printf("Treble: %i\n", treble);
-        }
+        trebble_up();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // treup = true;
+        // display = true;
+        
       }
       else {
-        oledterm.Clear();
-        oledterm.printf("SongPlaceholder\n");
-        oledterm.printf("Toggle Play/Pause\n");
+        pause = !pause;
       }
-      Delay(50);
       break; 
 
     case 3: //next/prev
-      oledterm.Clear();
-      oledterm.printf("SongPlaceholder\n");
-      oledterm.printf("Toggle Play/Pause\n");
-    //   if(SW1.ReadBool())
-    //   {
-    //     if(bass <= 0){
-    //       oledterm.printf("Bass: 0\n");
-    //   }
-    //     else if(bass > 0){
-    //     bass -= 1;
-    //     oledterm.printf("Bass: %i\n", bass);
-    //   }
-    // }
-    //   if(SW0.ReadBool())
-    //   {
-    //     if(bass >= 10){
-    //       oledterm.printf("Bass: 10\n");
-    //     }
-    //     else if(bass < 10){
-    //       bass += 1;
-    //       oledterm.printf("Bass: %i\n", bass);
-    //     }
-
-    //   }
-    // Delay(50);
+      if(SW1.ReadBool())
+      {
+        prev = true;
+      }
+      if(SW0.ReadBool())
+      {
+        next = true;
+      }
       break; 
 
     case 4: //shuffle
-      if(SW1.ReadBool()){
-        //shuffle = 0;
-        oledterm.Clear();
-        oledterm.printf("SongPlaceholder\n");
-        oledterm.printf("Shuffle off.\n");
-      }
-      else if(SW0.ReadBool()){
-        //shuffle = 1;
-        oledterm.Clear();
-        oledterm.printf("SongPlaceholder\n");
-        oledterm.printf("Shuffle on.\n");
-      }
-      else {
-        oledterm.Clear();
-        oledterm.printf("SongPlaceholder\n");
-        oledterm.printf("Toggle Play/Pause\n");
-      }
-      Delay(50);
+      shuffle = true;
+
+      break;
+    default: printf("whatever\n");
       break;
   }
+  taskEXIT_CRITICAL();
+  }
+  //vTaskDelay(10);
 }
 
-// void readFileTask(void *p){
-//  UINT bytes_read = 1024;
-//  uint8_t data_buffer[1024]={};
-//     while(1){
-//      f_open(&fil,song_name[current_song],FA_READ);
-//      while(!next){
-  
-//        //while(pause);
-//        f_read(&fil,data_buffer,1024,&bytes_read);
-//          xQueueSend(data_queue,&data_buffer,portMAX_DELAY);
-//          if(bytes_read != 1024){
-//              break;
-//            } 
-//            //vTaskDelay(10); 
-//      }
-//      f_close(&fil);
-//      while(1);
-//      current_song++;
-//     }
-// }
 
-// void SendDataTask(void *p){
-//  uint8_t buffer[1024];
-//  while(1){
-//    if(xQueueReceive(data_queue,&buffer,100) == pdTRUE){
-//      printf("sending data to decoder\n");
-//      //xSemaphoreTakeFromISR(decoder_lock,nullptr);
-//      decode.send_data(buffer,1024);
-//      //xSemaphoreGiveFromISR(decoder_lock,nullptr);
-//    }
-//    vTaskDelay(1);
-//  }
-// }
+
+void displayTask(void *p){
+    while(1){
+    while(!xSemaphoreTake(display_lock,100));
+    oledterm.Clear();
+    oledterm.printf("%s\nvol:%i, bass:%i, treble:%i\n%s", song_name[current_song],vol,bass,treble,setting[toggle]);
+    }
+}
 
 void decodeTask(void *p){
   uint8_t data_buffer[2048];
   UINT bytes_read;
   while(1){
+    pause = false;
+    next = false;
+    prev = false;
+    // current_song=10;
     f_open(&fil,song_name[current_song],FA_READ);
+    // f_open(&fil,song_name[10],FA_READ);
     bytes_read = 2048;
-    while(bytes_read == 2048){
+    while(bytes_read == 2048 && !next && !prev && !shuffle){
+    // while(bytes_read == 2048){
       f_read(&fil,data_buffer,2048,&bytes_read);
-      xSemaphoreTakeFromISR(decoder_lock,nullptr);
+      seed++;
+      // while(!xSemaphoreTake(decoder_lock,100));
+      taskENTER_CRITICAL();
       decode.send_data(data_buffer,bytes_read);
-      xSemaphoreGiveFromISR(decoder_lock,nullptr);
-      vTaskDelay(10);
+      taskEXIT_CRITICAL();
+      xSemaphoreGive(decoder_lock);
+      while(pause){
+        vTaskDelay(10);
+      }
+      vTaskDelay(30);
     }
     f_close(&fil);
-    vTaskDelay(100);
-    current_song++;
+    if(prev){
+      if(current_song==0){
+        current_song=song_count-1;
+      }
+      else{
+        current_song--;
+      }
+    }
+    else if(shuffle){
+      shuffle = false;
+      srand(seed);
+      current_song = (rand() % song_count);
+    }
+    else{
+      if(current_song+1<song_count){
+        current_song++;
+      }
+      else{
+        current_song = 0;
+      }
+    }
+    xSemaphoreGiveFromISR(display_lock,nullptr);
+    vTaskDelay(200);
   }
 }
 
@@ -410,10 +340,10 @@ int main(){
   SW0.resetResistor();
   SW0.enablePullDownResistor();
 
-  SW2.AttachInterruptHandler(&interruptLED1, Lab_GPIO::Edge::kRising);
+  SW2.AttachInterruptHandler(&interruptLED1, Lab_GPIO::Edge::kBoth);
   SW2.EnableInterrupts();
 
-  SW3.AttachInterruptHandler(&toggleFunction, Lab_GPIO::Edge::kRising);
+  SW3.AttachInterruptHandler(&toggleFunction, Lab_GPIO::Edge::kBoth);
   SW3.EnableInterrupts();
 
 
@@ -460,7 +390,7 @@ int main(){
       }
     } 
   }
-  printf("TEST: \n");
+  // printf("TEST: \n");
   int songnum = 1;
   for(int i=0;i<SIZE;i++){
     printf("%i.%s \n",songnum,song_name[i]);
@@ -476,23 +406,19 @@ int main(){
 
   // decoder setup
   decode.init();
-  // printf("init done\n");
-    // UINT bytes_read;
 
-   //     f_open(&fil,"one1.mp3",FA_READ);
-   //     uint8_t data_buffer[1024];
-  //    while(!next){
-  //      // while(pause);
-  //      f_read(&fil,data_buffer,1024,&bytes_read);
-  //      decode.send_data(data_buffer,bytes_read);
-   //     //printf("sending 1024 bytes\n");
-   //        //xQueueSend(data_queue,&data_buffer,portMAX_DELAY);
-   //        if(bytes_read != 1024){
-   //           break;
-  //          } 
-  //          //vTaskDelay(10); 
-  //    }
-  //    f_close(&fil);
+  // UINT bytes_read;
+  // uint8_t data_buffer[2048];
+  // f_open(&fil,song_name[10],FA_READ);
+  //   bytes_read = 2048;
+  //   // while(bytes_read == 2048 && !next && !prev){
+  //   while(1){
+  //     f_read(&fil,data_buffer,2048,&bytes_read);
+  //     decode.send_data(data_buffer,bytes_read);
+
+  //     //vTaskDelay(10);
+  //   }
+
 
   //add rtos command
   LOG_INFO("Adding rtos command to command line...");
@@ -500,12 +426,15 @@ int main(){
   ci.Initialize();
 
   decoder_lock = xSemaphoreCreateMutex();
-  // data_queue = xQueueCreate(4,1024);
+  display_lock = xSemaphoreCreateMutex();
+
+  
 
   xTaskCreate(TerminalTask, "Terminal", 501, nullptr, rtos::Priority::kLow, nullptr);
-  // xTaskCreate(readFileTask,"SD_Read",1024,(void*)1,rtos::Priority::kMedium,nullptr);
-  // xTaskCreate(SendDataTask,"Decode_Send",1024,(void*)1,rtos::Priority::kMedium,nullptr);
-  xTaskCreate(decodeTask,"decoder",2048,nullptr,rtos::Priority::kMedium,nullptr);
+
+
+  xTaskCreate(displayTask,"Display",501,nullptr,rtos::Priority::kMedium,nullptr);
+  xTaskCreate(decodeTask,"decoder",4096,nullptr,rtos::Priority::kHigh,nullptr);
   vTaskStartScheduler();
   
   while(1); 
