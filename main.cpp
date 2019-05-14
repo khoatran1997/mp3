@@ -43,14 +43,14 @@ bool pause = false;
 bool prev = false;
 bool sw3pressed=false;
 bool sw2pressed=false;
-int vol = 12; 
-uint16_t bass = 8;
-int treble = 16;
+int vol = 10; 
+uint16_t bass = 0;
+int treble = 0;
 int toggle = 0;
-uint16_t VOL = 0x4040;
-uint16_t BASS = 0x7af6;
+uint16_t VOL = 0x3838;
+uint16_t BASS = 0x0806;
 int seed = 0;
-char setting[5][10]={"volume","bass","treble","next/prev","shuffle"};
+char setting[5][10]={"volume","next/prev","bass","treble","shuffle"};
 
 //song name buffer
 char song_name[SIZE][100];
@@ -86,6 +86,9 @@ namespace {
   }
 }
 
+
+
+
 bool isMP3(char* file_name){
   if(file_name[0] == '.'){ //check for hidden files (i.e ._FILENAME)
     return false;
@@ -100,12 +103,12 @@ bool isMP3(char* file_name){
 }
 
 void bass_up(){
-  if(bass<16){
+  if(bass<15){
     BASS += 0x10;
     bass++;
-    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
+    //while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
-    xSemaphoreGiveFromISR(decoder_lock,nullptr);
+    //xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
@@ -113,19 +116,19 @@ void bass_down(){
   if(bass>0){
     BASS -= 0x10;
     bass--;
-    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
+    //while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
-    xSemaphoreGiveFromISR(decoder_lock,nullptr);
+    //xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void treble_up(){
-  if(treble<16){
+  if(treble<7){
     BASS += 0x1000;
     treble++;
-    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
+    //while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
-    xSemaphoreGiveFromISR(decoder_lock,nullptr);
+    //xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
@@ -133,30 +136,34 @@ void treble_down(){
   if(treble>0){
     BASS -= 0x1000;
     treble--;
-    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
+    //while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_BASS,BASS);
-    xSemaphoreGiveFromISR(decoder_lock,nullptr);
+    //xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void vol_up(){
-  if(vol<16){
-    printf("vol up isr called\n");
-    VOL -= 0x1010;
+  if(vol<24){
+    VOL -= 0x0404;
     vol++;
-    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
+    //while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
     decode.write_reg(VS1053_REG_VOLUME,VOL);
-    xSemaphoreGiveFromISR(decoder_lock,nullptr);
+    //xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
 void vol_down(){
   if(vol>0){
-    VOL += 0x1010;
+    VOL += 0x0404;
     vol--;
-    while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
-    decode.write_reg(VS1053_REG_VOLUME,VOL);
-    xSemaphoreGiveFromISR(decoder_lock,nullptr);
+    //while(!xSemaphoreTakeFromISR(decoder_lock,nullptr));
+    if(vol==0){
+      decode.write_reg(VS1053_REG_VOLUME,0xFEFE);
+    }
+    else{
+      decode.write_reg(VS1053_REG_VOLUME,VOL);
+    }
+    //xSemaphoreGiveFromISR(decoder_lock,nullptr);
   }
 }
 
@@ -177,100 +184,109 @@ void toggleFunction() //use SW0
     //vTaskDelay(500);
 }
 
-void interruptSwitch(){ // go control
+void sw2ISR(){ // go control
   if(SW2.ReadBool() && !sw2pressed){
     sw2pressed = true;
   }
   else if(!SW2.ReadBool() && sw2pressed){
     sw2pressed = false;
     taskENTER_CRITICAL();
-    switch(toggle){
-      case 0: //volume
-        if(SW1.ReadBool())//volume down
-        {
-          vol_down();
-          xSemaphoreGiveFromISR(display_lock,nullptr);
-          // voldown = true;
-          // display = true;
-        }
-        else if(SW0.ReadBool())//volume up
-        {
-          vol_up();
-          xSemaphoreGiveFromISR(display_lock,nullptr);
-          // volup = true;
-          // display = true;
-        }
-        else{
-            pause = !pause;
-        }
-        break;
-
-      case 1: //bass
-        if(SW1.ReadBool()){//bass down
-          bass_down();
-          xSemaphoreGiveFromISR(display_lock,nullptr);
-          // bdown = true;
-          // display = true;
-        }
-        else if(SW0.ReadBool()){//bass up
-          bass_up();
-          xSemaphoreGiveFromISR(display_lock,nullptr);
-          // bup = true;
-          // display = true;
-        }
-        else{
+  switch(toggle){
+    case 0: //volume
+      if(SW1.ReadBool())//volume down
+      {
+        vol_down();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // voldown = true;
+        // display = true;
+      }
+      else if(SW0.ReadBool())//volume up
+      {
+        vol_up();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // volup = true;
+        // display = true;
+      }
+      else{
           pause = !pause;
-        }
+      }
+      break;
 
-        break; 
+    case 2: //bass
+      if(SW1.ReadBool()){//bass down
+        bass_down();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // bdown = true;
+        // display = true;
+      }
+      else if(SW0.ReadBool()){//bass up
+        bass_up();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // bup = true;
+        // display = true;
+      }
+      else{
+        pause = !pause;
+      }
 
-      case 2: //treble
-        if(SW1.ReadBool()){
-          treble_down();
-          xSemaphoreGiveFromISR(display_lock,nullptr);
-          // tredown = true;
-          // display = true;
-        }
-        else if(SW0.ReadBool()){
-          treble_up();
-          xSemaphoreGiveFromISR(display_lock,nullptr);
-          // treup = true;
-          // display = true;
-          
-        }
-        else {
-          pause = !pause;
-        }
-        break; 
+      break; 
 
-      case 3: //next/prev
-        if(SW1.ReadBool())
-        {
-          prev = true;
-        }
-        if(SW0.ReadBool())
-        {
-          next = true;
-        }
-        break; 
+    case 3: //treble
+      if(SW1.ReadBool()){
+        treble_down();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // tredown = true;
+        // display = true;
+      }
+      else if(SW0.ReadBool()){
+        treble_up();
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+        // treup = true;
+        // display = true;
+        
+      }
+      else {
+        pause = !pause;
+      }
+      break; 
 
-      case 4: //shuffle
-        shuffle = true;
+    case 1: //next/prev
+      if(SW1.ReadBool())
+      {
+        prev = true;
+      }
+      if(SW0.ReadBool())
+      {
+        next = true;
+      }
+      break; 
 
-        break;
-      default: printf("whatever\n");
-        break;
-    }
-    taskEXIT_CRITICAL();
+    case 4: //shuffle
+      if(SW1.ReadBool() || SW0.ReadBool()){
+        shuffle = !shuffle;
+        xSemaphoreGiveFromISR(display_lock,nullptr);
+      }
+      else{
+        pause = !pause;
+      }
+      break;
+    default: printf("whatever\n");
+      break;
+  }
+  taskEXIT_CRITICAL();
   }
   //vTaskDelay(10);
 }
+
+
 
 void displayTask(void *p){
     while(1){
     while(!xSemaphoreTake(display_lock,100));
     oledterm.Clear();
-    oledterm.printf("%s\nvol:%i, bass:%i, treble:%i\n%s", song_name[current_song],vol,bass,treble,setting[toggle]);
+    oledterm.printf("%s\nvol:%i, bass:%i, treble:%i\nshuffle:%s\n\n%s\n", song_name[current_song],vol,bass,treble,(shuffle)?"On":"Off",setting[toggle]);
+    // if(shuffle) oledterm.printf("shuffle: On\n");
+    // else oledterm.printf("shuffle: Off\n");
     }
 }
 
@@ -285,7 +301,7 @@ void decodeTask(void *p){
     f_open(&fil,song_name[current_song],FA_READ);
     // f_open(&fil,song_name[10],FA_READ);
     bytes_read = 2048;
-    while(bytes_read == 2048 && !next && !prev && !shuffle){
+    while(bytes_read == 2048 && !next && !prev){
     // while(bytes_read == 2048){
       f_read(&fil,data_buffer,2048,&bytes_read);
       seed++;
@@ -297,7 +313,7 @@ void decodeTask(void *p){
       while(pause){
         vTaskDelay(10);
       }
-      vTaskDelay(30);
+      vTaskDelay(20);
     }
     f_close(&fil);
     if(prev){
@@ -309,7 +325,7 @@ void decodeTask(void *p){
       }
     }
     else if(shuffle){
-      shuffle = false;
+      //shuffle = false;
       srand(seed);
       current_song = (rand() % song_count);
     }
@@ -328,14 +344,14 @@ void decodeTask(void *p){
 
 int main(){
   oledterm.Initialize();
-  oledterm.printf("OLED Initialized...\n");
+  oledterm.printf("Welcome to JBLWK\n");
   SW1.resetResistor();
   SW1.enablePullDownResistor();
 
   SW0.resetResistor();
   SW0.enablePullDownResistor();
 
-  SW2.AttachInterruptHandler(&interruptSwitch, Lab_GPIO::Edge::kBoth);
+  SW2.AttachInterruptHandler(&sw2ISR, Lab_GPIO::Edge::kBoth);
   SW2.EnableInterrupts();
 
   SW3.AttachInterruptHandler(&toggleFunction, Lab_GPIO::Edge::kBoth);
@@ -386,11 +402,11 @@ int main(){
     } 
   }
   // printf("TEST: \n");
-  int songnum = 1;
-  for(int i=0;i<song_count;i++){
-    printf("%i.%s \n",songnum,song_name[i]);
-    songnum++;
-  }
+  // int songnum = 1;
+  // for(int i=0;i<SIZE;i++){
+  //   printf("%i.%s \n",songnum,song_name[i]);
+  //   songnum++;
+  // }
   f_closedir(&dir);
   //exit if no song found
   if(song_count == 0) exit(1);

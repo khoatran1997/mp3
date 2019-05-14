@@ -215,11 +215,11 @@ public:
         reset->SetHigh();
         hardware_reset();
 
-        write_reg(VS1053_REG_VOLUME,0x4040);
+        write_reg(VS1053_REG_VOLUME,0x3838);
         Delay(10);
         write_reg(VS1053_REG_CLOCKF,0xE000);
         Delay(10);
-        write_reg(VS1053_REG_BASS,0x7af6);
+        write_reg(VS1053_REG_BASS,0x0806);
         Delay(10);
     }
 
