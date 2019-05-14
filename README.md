@@ -1,5 +1,5 @@
 # MP3
-### Joseph Culaton, Brandon Nguyen, Long Vu, Wenhao Tan ,Khoa Tran
+### Joseph Culaton, Brandon Nguyen, Long Vu, Wenhao Tan, Khoa Tran
 PPT: https://docs.google.com/presentation/d/1ykGuZzfZ5lA401L6-7CkxvzOqIWkYJUvk9kvEWWPY6A/edit?usp=sharing
 <br/>
 
