@@ -50,7 +50,7 @@ int toggle = 0;
 uint16_t VOL = 0x4040;
 uint16_t BASS = 0x7af6;
 int seed = 0;
-char setting[5][10]={"volume","bass","trebble","next/prev","shuffle"};
+char setting[5][10]={"volume","bass","treble","next/prev","shuffle"};
 
 //song name buffer
 char song_name[SIZE][100];
@@ -85,9 +85,6 @@ namespace {
     vTaskDelete(nullptr);
   }
 }
-
-
-
 
 bool isMP3(char* file_name){
   if(file_name[0] == '.'){ //check for hidden files (i.e ._FILENAME)
@@ -187,89 +184,87 @@ void interruptSwitch(){ // go control
   else if(!SW2.ReadBool() && sw2pressed){
     sw2pressed = false;
     taskENTER_CRITICAL();
-  switch(toggle){
-    case 0: //volume
-      if(SW1.ReadBool())//volume down
-      {
-        vol_down();
-        xSemaphoreGiveFromISR(display_lock,nullptr);
-        // voldown = true;
-        // display = true;
-      }
-      else if(SW0.ReadBool())//volume up
-      {
-        vol_up();
-        xSemaphoreGiveFromISR(display_lock,nullptr);
-        // volup = true;
-        // display = true;
-      }
-      else{
+    switch(toggle){
+      case 0: //volume
+        if(SW1.ReadBool())//volume down
+        {
+          vol_down();
+          xSemaphoreGiveFromISR(display_lock,nullptr);
+          // voldown = true;
+          // display = true;
+        }
+        else if(SW0.ReadBool())//volume up
+        {
+          vol_up();
+          xSemaphoreGiveFromISR(display_lock,nullptr);
+          // volup = true;
+          // display = true;
+        }
+        else{
+            pause = !pause;
+        }
+        break;
+
+      case 1: //bass
+        if(SW1.ReadBool()){//bass down
+          bass_down();
+          xSemaphoreGiveFromISR(display_lock,nullptr);
+          // bdown = true;
+          // display = true;
+        }
+        else if(SW0.ReadBool()){//bass up
+          bass_up();
+          xSemaphoreGiveFromISR(display_lock,nullptr);
+          // bup = true;
+          // display = true;
+        }
+        else{
           pause = !pause;
-      }
-      break;
+        }
 
-    case 1: //bass
-      if(SW1.ReadBool()){//bass down
-        bass_down();
-        xSemaphoreGiveFromISR(display_lock,nullptr);
-        // bdown = true;
-        // display = true;
-      }
-      else if(SW0.ReadBool()){//bass up
-        bass_up();
-        xSemaphoreGiveFromISR(display_lock,nullptr);
-        // bup = true;
-        // display = true;
-      }
-      else{
-        pause = !pause;
-      }
+        break; 
 
-      break; 
+      case 2: //treble
+        if(SW1.ReadBool()){
+          trebble_down();
+          xSemaphoreGiveFromISR(display_lock,nullptr);
+          // tredown = true;
+          // display = true;
+        }
+        else if(SW0.ReadBool()){
+          trebble_up();
+          xSemaphoreGiveFromISR(display_lock,nullptr);
+          // treup = true;
+          // display = true;
+          
+        }
+        else {
+          pause = !pause;
+        }
+        break; 
 
-    case 2: //treble
-      if(SW1.ReadBool()){
-        trebble_down();
-        xSemaphoreGiveFromISR(display_lock,nullptr);
-        // tredown = true;
-        // display = true;
-      }
-      else if(SW0.ReadBool()){
-        trebble_up();
-        xSemaphoreGiveFromISR(display_lock,nullptr);
-        // treup = true;
-        // display = true;
-        
-      }
-      else {
-        pause = !pause;
-      }
-      break; 
+      case 3: //next/prev
+        if(SW1.ReadBool())
+        {
+          prev = true;
+        }
+        if(SW0.ReadBool())
+        {
+          next = true;
+        }
+        break; 
 
-    case 3: //next/prev
-      if(SW1.ReadBool())
-      {
-        prev = true;
-      }
-      if(SW0.ReadBool())
-      {
-        next = true;
-      }
-      break; 
+      case 4: //shuffle
+        shuffle = true;
 
-    case 4: //shuffle
-      shuffle = true;
-
-      break;
-    default: printf("whatever\n");
-      break;
-  }
-  taskEXIT_CRITICAL();
+        break;
+      default: printf("whatever\n");
+        break;
+    }
+    taskEXIT_CRITICAL();
   }
   //vTaskDelay(10);
 }
-
-
 
 void displayTask(void *p){
     while(1){
@@ -392,7 +387,7 @@ int main(){
   }
   // printf("TEST: \n");
   int songnum = 1;
-  for(int i=0;i<SIZE;i++){
+  for(int i=0;i<song_count;i++){
     printf("%i.%s \n",songnum,song_name[i]);
     songnum++;
   }
