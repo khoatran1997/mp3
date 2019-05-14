@@ -180,7 +180,7 @@ void toggleFunction() //use SW0
     //vTaskDelay(500);
 }
 
-void interruptLED1(){ // go control
+void interruptSwitch(){ // go control
   if(SW2.ReadBool() && !sw2pressed){
     sw2pressed = true;
   }
@@ -340,7 +340,7 @@ int main(){
   SW0.resetResistor();
   SW0.enablePullDownResistor();
 
-  SW2.AttachInterruptHandler(&interruptLED1, Lab_GPIO::Edge::kBoth);
+  SW2.AttachInterruptHandler(&interruptSwitch, Lab_GPIO::Edge::kBoth);
   SW2.EnableInterrupts();
 
   SW3.AttachInterruptHandler(&toggleFunction, Lab_GPIO::Edge::kBoth);
