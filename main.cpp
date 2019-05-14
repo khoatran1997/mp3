@@ -119,7 +119,7 @@ void bass_down(){
   }
 }
 
-void trebble_up(){
+void treble_up(){
   if(treble<16){
     BASS += 0x1000;
     treble++;
@@ -129,7 +129,7 @@ void trebble_up(){
   }
 }
 
-void trebble_down(){
+void treble_down(){
   if(treble>0){
     BASS -= 0x1000;
     treble--;
@@ -226,13 +226,13 @@ void interruptSwitch(){ // go control
 
       case 2: //treble
         if(SW1.ReadBool()){
-          trebble_down();
+          treble_down();
           xSemaphoreGiveFromISR(display_lock,nullptr);
           // tredown = true;
           // display = true;
         }
         else if(SW0.ReadBool()){
-          trebble_up();
+          treble_up();
           xSemaphoreGiveFromISR(display_lock,nullptr);
           // treup = true;
           // display = true;
